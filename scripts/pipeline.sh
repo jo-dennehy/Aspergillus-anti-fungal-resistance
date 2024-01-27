@@ -16,10 +16,18 @@ for i in */*.fq.gz; do gunzip $i; done
 
 # CutAdapt
 # Quality and adapter trimming
-cutadapt -a GATCGGAAGAGCACACGTCTGAACTCCAGTCACGGATGACTATCTCGTATGCCGTCTTCTGCTTG -q 30 -O 10 -n 3 -m 25 -o out1_trimmed.fastq -p out2_trimmed.fastq *1.fq *2.fq
+for i in ./*/; do (cd '$i' && cutadapt -a GATCGGAAGAGCACACGTCTGAACTCCAGTCACGGATGACTATCTCGTATGCCGTCTTCTGCTTG -q 30 -O 10 -n 3 -m 25 -o out1_trimmed.fastq -p out2_trimmed.fastq *1.fq *2.fq); done
 
 # FastQC again
-for i in *.fastq; do fastqc $i; done
+for i in */*_trimmed.fastq; do fastqc $i; done
+
+# Run rename.py
+python ~/aspergillus_project/scripts/rename.py
+
+# multiQC again
+mkdir trimmed_fastqc_out_folder
+for i in */*trimmed_fastqc.zip; do cp $i fastqc_out/trimmed_fastqc_out_folder/; done
+bash ~/aspergillus_project/scripts/multiQC
 
 # Hisat2 index files
 hisat2-build GCF_000002655.1_ASM265v1_genomic.fna genomic_ref
