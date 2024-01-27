@@ -1,0 +1,47 @@
+zips=$(ls *.zip)
+
+for i in $zips; do
+    unzip -o "$i" &>/dev/null;
+done
+
+fastq_folders=$(ls -d */ | sed 's#/##g') # List only directories
+
+# Remove fq_aggregated directory if present
+if [ -d "fq_aggregated" ]; then
+    rm -rf fq_aggregated
+fi
+
+mkdir fq_aggregated
+
+# Rename Files within each using folder name.
+for folder in $fastq_folders; do
+    img_files=$(find "${folder}/Images" -type f -name "*.png")
+    for img in $img_files; do
+        img_name=$(basename "$img")
+        img_name=${img_name%.*}
+        new_name=${folder}
+        mkdir -p "fq_aggregated/${img_name}"
+        mv "$img" "fq_aggregated/${img_name}/${new_name}.png"
+    done
+done
+
+# Concatenate Summaries
+for folder in $fastq_folders; do
+    parent_folder=$(basename "$(dirname "$folder")")
+    folder_name=$(basename "$folder")
+    if [ -e "${folder}/summary.txt" ]; then
+        mkdir -p fq_aggregated # Ensure fq_aggregated directory exists
+        cat "${folder}/summary.txt" | awk -v p="${parent_folder}" -v f="${folder_name}" '{print $0 "\t" p "\t" f}' >> fq_aggregated/summary.txt
+    fi
+done
+
+# Concatenate Statistics
+for folder in $fastq_folders; do
+    parent_folder=$(basename "$(dirname "$folder")")
+    folder_name=$(basename "$folder")
+    if [ -e "${folder}/fastqc_data.txt" ]; then
+        mkdir -p fq_aggregated # Ensure fq_aggregated directory exists
+        head -n 10 "${folder}/fastqc_data.txt" | tail -n 7 | awk -v p="${parent_folder}" -v f="${folder_name}" '{print $0 "\t" p "\t" f}' >> fq_aggregated/statistics.txt
+    fi
+    rm -rf "${folder}"
+done
