@@ -1,0 +1,103 @@
+### echo snippy 4.6.0
+### cd /mnt/tmp/job_working_directory/008/093/8093204/working
+
+### /usr/local/bin/snippy --outdir Cutadapt_on_data_2_and_data_1__Read_1_Output --cpus 4 --ram 15 --ref ref.fna --mapqual 60 --mincov 10 --minfrac 0.9 --minqual 100.0 --R1 /mnt/user-data-volA/data11/8/f/a/dataset_8fa5dd50-afcf-405b-99a8-2a7ef8ac73b0.dat --R2 /mnt/user-data-volA/data11/c/2/1/dataset_c21c1ed9-257b-4fc4-9002-f1dd51791667.dat
+
+### samtools faidx reference/ref.fa
+
+
+### bwa index reference/ref.fa
+
+[bwa_index] Pack FASTA... 0.27 sec
+[bwa_index] Construct BWT for the packed sequence...
+[BWTIncCreate] textLength=58840284, availableWord=16139772
+[BWTIncConstructFromPacked] 10 iterations done. 26622524 characters processed.
+[BWTIncConstructFromPacked] 20 iterations done. 49181068 characters processed.
+[bwt_gen] Finished constructing BWT in 25 iterations.
+[bwa_index] 14.34 seconds elapse.
+[bwa_index] Update BWT... 0.34 sec
+[bwa_index] Pack forward-only FASTA... 0.19 sec
+[bwa_index] Construct SA from BWT and Occ... 10.48 sec
+[main] Version: 0.7.17-r1188
+[main] CMD: bwa index reference/ref.fa
+[main] Real time: 25.920 sec; CPU: 25.616 sec
+
+### mkdir -p reference/genomes && cp -f reference/ref.fa reference/genomes/ref.fa
+
+
+### ln -sf reference/ref.fa .
+
+
+### ln -sf reference/ref.fa.fai .
+
+
+### mkdir -p reference/ref && gzip -c reference/ref.gff > reference/ref/genes.gff.gz
+
+
+### bwa mem  -Y -M -R '@RG\tID:Cutadapt_on_data_2_and_data_1__Read_1_Output\tSM:Cutadapt_on_data_2_and_data_1__Read_1_Output' -t 4 reference/ref.fa /mnt/user-data-volA/data11/8/f/a/dataset_8fa5dd50-afcf-405b-99a8-2a7ef8ac73b0.dat /mnt/user-data-volA/data11/c/2/1/dataset_c21c1ed9-257b-4fc4-9002-f1dd51791667.dat | samclip --max 10 --ref reference/ref.fa.fai | samtools sort -n -l 0 -T /mnt/tmp/job_working_directory/008/093/8093204/tmp --threads 1 -m 7500M | samtools fixmate -m --threads 1 - - | samtools sort -l 0 -T /mnt/tmp/job_working_directory/008/093/8093204/tmp --threads 1 -m 7500M | samtools markdup -T /mnt/tmp/job_working_directory/008/093/8093204/tmp --threads 1 -r -s - - > snps.bam
+
+COMMAND: samtools markdup -T /mnt/tmp/job_working_directory/008/093/8093204/tmp --threads 1 -r -s - -
+READ: 16181581
+WRITTEN: 12992025
+EXCLUDED: 239158
+EXAMINED: 15942423
+PAIRED: 15735586
+SINGLE: 206837
+DUPLICATE PAIR: 3092046
+DUPLICATE SINGLE: 97510
+DUPLICATE PAIR OPTICAL: 0
+DUPLICATE SINGLE OPTICAL: 0
+DUPLICATE NON PRIMARY: 0
+DUPLICATE NON PRIMARY OPTICAL: 0
+DUPLICATE PRIMARY TOTAL: 3189556
+DUPLICATE TOTAL: 3189556
+ESTIMATED_LIBRARY_SIZE: 17300937
+
+### samtools index snps.bam
+
+
+### fasta_generate_regions.py reference/ref.fa.fai 4273078 > reference/ref.txt
+
+
+### freebayes-parallel reference/ref.txt 4 -p 2 -P 0 -C 2 -F 0.05 --min-coverage 10 --min-repeat-entropy 1.0 -q 13 -m 60 --strict-vcf   -f reference/ref.fa snps.bam > snps.raw.vcf
+
+
+### bcftools view --include 'FMT/GT="1/1" && QUAL>=100.0 && FMT/DP>=10 && (FMT/AO)/(FMT/DP)>=0.9' snps.raw.vcf  | vt normalize -r reference/ref.fa - | bcftools annotate --remove '^INFO/TYPE,^INFO/DP,^INFO/RO,^INFO/AO,^INFO/AB,^FORMAT/GT,^FORMAT/DP,^FORMAT/RO,^FORMAT/AO,^FORMAT/QR,^FORMAT/QA,^FORMAT/GL' > snps.filt.vcf
+
+
+### cp snps.filt.vcf snps.vcf
+
+
+### /usr/local/bin/snippy-vcf_to_tab --gff reference/ref.gff --ref reference/ref.fa --vcf snps.vcf > snps.tab
+
+Loading reference: reference/ref.fa
+Loaded 9 sequences.
+Loading features: reference/ref.gff
+Parsing variants: snps.vcf
+Converted 63280 SNPs to TAB format.
+
+### /usr/local/bin/snippy-vcf_extract_subs snps.filt.vcf > snps.subs.vcf
+
+
+### bcftools convert -Oz -o snps.vcf.gz snps.vcf
+
+
+### bcftools index -f snps.vcf.gz
+
+
+### bcftools consensus --sample Cutadapt_on_data_2_and_data_1__Read_1_Output -f reference/ref.fa -o snps.consensus.fa snps.vcf.gz
+
+Applied 63280 variants
+
+### bcftools convert -Oz -o snps.subs.vcf.gz snps.subs.vcf
+
+
+### bcftools index -f snps.subs.vcf.gz
+
+
+### bcftools consensus --sample Cutadapt_on_data_2_and_data_1__Read_1_Output -f reference/ref.fa -o snps.consensus.subs.fa snps.subs.vcf.gz
+
+Applied 62928 variants
+
+### rm -f snps.subs.vcf.gz snps.subs.vcf.gz.csi snps.subs.vcf.gz.tbi
+

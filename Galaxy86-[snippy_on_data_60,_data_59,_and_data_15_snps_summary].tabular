@@ -1,0 +1,11 @@
+DateTime	2024-01-29T20:36:13
+ReadFiles	/mnt/user-data-volA/data11/8/f/a/dataset_8fa5dd50-afcf-405b-99a8-2a7ef8ac73b0.dat /mnt/user-data-volA/data11/c/2/1/dataset_c21c1ed9-257b-4fc4-9002-f1dd51791667.dat
+Reference	/mnt/user-data-volC/data10/f/3/a/dataset_f3af040f-2c2c-4d1f-a53a-4a06040ba059.dat
+ReferenceSize	29420142
+Software	snippy 4.6.0
+Variant-COMPLEX	3402
+Variant-DEL	2578
+Variant-INS	2233
+Variant-MNP	465
+Variant-SNP	54602
+VariantTotal	63280
