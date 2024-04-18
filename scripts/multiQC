@@ -1,40 +1,177 @@
-# Run this script in a directory containing zip files from fastqc. It aggregates images of each type in individual folders
-# So looking across data is quick.
+# Load necessary libraries
+library(DESeq2)
+library(ggplot2)
+install.packages("ggrepel")
+library(ggrepel)
+install.packages("gridExtra")
+library(gridExtra)
+library(readxl)
+install.packages('gplots')
+library(gplots)
+library(RColorBrewer)
 
-zips=`ls *.zip`
+# Set working directory to where the excel spreadsheet conatining all of the count files is located
+setwd("C:/Users/Student/OneDrive - University of Bath/Uni/Research project 1B/Project/Deseq2")
 
-for i in $zips; do
-    unzip -o $i &>/dev/null;
-done
+### Input data ----
+count_file <- read_excel("Counts_Jo.xlsx")
+count_matrix <- count_file
+head(count_matrix)
 
-fastq_folders=${zips/.zip/}
-
-rm -rf fq_aggregated # Remove aggregate folder if present
-mkdir fq_aggregated
-
-# Rename Files within each using folder name.
-for folder in $fastq_folders; do
-    folder=${folder%.*}
-    img_files=`ls ${folder}/Images/*png`;
-    for img in $img_files; do
-        img_name=$(basename "$img");
-        img_name=${img_name%.*}
-        new_name=${folder};
-        mkdir -p fq_aggregated/${img_name};
-        mv $img fq_aggregated/${img_name}/${folder/_fastqc/}.png;
-    done;
-done;
+#### create metaData ----
+# Create sample names based on the column names exclude the first column "Gene_ID"
+sample_names <- colnames(count_matrix[,-1])
+count_matrix <- as.data.frame(count_matrix)
+count_matrix[is.na(count_matrix)] <- 0
+# Define regular expression patterns to extract condition and treatment
+conditions <- gsub("^([^_]*_[^_]*)_.*$", "\\1", sample_names)
+Teb <- c("NT", "NT", "NT", "T", "T", "T", "T", "T", "T", "T", "T", "T", "T", "T", "T", "NT", "NT", "NT", "NT", "NT", "NT", "NT", "NT", "NT")
 
 
-# Concatenate Summaries
-for folder in $fastq_folders; do
-    folder=${folder%.*}
-    cat ${folder}/summary.txt >> fq_aggregated/summary.txt
-done;
+# Create metadata data frame
+metadata <- data.frame(
+  sampleName = sample_names,
+  condition = conditions,
+  teb_treatment = Teb,
+  geo_id = seq_along(sample_names)  # Using seq_along to get correct length
+)
+metadata <- as.data.frame(metadata)
+print(metadata)
 
-# Concatenate Statistics
-for folder in $fastq_folders; do
-    folder=${folder%.*}
-    head -n 10 ${folder}/fastqc_data.txt | tail -n 7 | awk -v f=${folder/_fastqc/} '{ print $0 "\t" f }' >> fq_aggregated/statistics.txt
-    rm -rf ${folder}
-done
+# DDS
+dds <- DESeqDataSetFromMatrix(countData = count_matrix,
+                              colData = metadata,
+                              design = ~ condition + teb_treatment,
+                              tidy = TRUE
+                              )
+
+# Run DESeq
+dds <- DESeq(dds)
+
+
+### look at results ----
+res <- results(dds)
+###head(results(dds, tidy=TRUE))
+summary(res)
+
+############# Subsets for pairwise ####################################
+### Change input conditions according to test --------------
+# This test is comparing pH6_0_NT vs pH6_1_NT
+# Subset metadata for "pH6_0_NT" and "pH6_1_NT"
+subset_metadata1 <- metadata[metadata$condition %in% c("pH6_0", "pH6_1") &
+                              metadata$teb_treatment == "NT", ]
+
+# Get sample names for "pH6_0_NT" and "pH6_1_NT" with replicate identifiers
+sample_names_pH6_NT <- subset_metadata1$sampleName
+
+# Subset dds to include "pH6_0_NT" and "pH6_1_NT" conditions with replicates
+dds_pH6_NT <- dds[, colnames(dds) %in% sample_names_pH6_NT]
+
+# Create design formula
+design_pH6_NT <- ~ condition
+
+# Run DESeq2 analysis
+dds_pH6_NT <- DESeqDataSetFromMatrix(countData = counts(dds_pH6_NT),
+                                     colData = subset_metadata1,
+                                     design = design_pH6_NT)
+
+# Estimate size factors
+dds_pH6_NT <- estimateSizeFactors(dds_pH6_NT)
+
+# Estimate dispersions
+dds_pH6_NT <- DESeq(dds_pH6_NT)
+
+# Results for "pH6_0_NT" vs "pH6_1_NT"
+res_pH6_NT <- results(dds_pH6_NT)
+
+# Subset significant results
+resSig_pH6_61_NT <- res_pH6_NT[which(res_pH6_NT$padj < 0.05), ]
+
+# Write results to CSV
+write.csv(as.data.frame(resSig_pH6_NT), file = "pH6_0_NT_vs_pH6_1_NT_results.csv")
+
+# Volcano plot
+#reset par
+par(mfrow=c(1,1))
+# Make a basic volcano plot
+with(res_pH6_NT, plot(log2FoldChange, -log10(pvalue), pch=20, main="Volcano plot", xlim=c(-3,3)))
+
+# Add colored points: blue if padj<0.01, red if log2FC>1 and padj<0.05)
+with(subset(res_pH6_NT, padj<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="blue"))
+with(subset(res_pH6_NT, padj<.05 & abs(log2FoldChange)>2), points(log2FoldChange, -log10(pvalue), pch=20, col="red"))
+
+
+###
+#Print a list of up and down regulated genes:
+plotMA( res, ylim = c(-10, 10) )
+
+res <- res[order(res$padj),]
+head(res)
+
+### Subset for adjusted p value of < 0.05 ---
+resSig <- res[ which(res$padj < 0.05 ), ]
+# Subset the most strongly down regulated 
+head( resSig[ order( resSig$log2FoldChange ), ] )
+# Most strongly up regulated:
+tail( resSig[ order( resSig$log2FoldChange ), ] )
+
+# Extract data
+#write.csv( as.data.frame(resSig), file="results.csv" )
+
+
+# Check data
+x <- dds$condition
+y <- assay(dds)["AFUA_1G17040", ]
+# Print the values to check
+print(x)
+print(y)
+
+
+# Volcano plot 
+#reset par
+par(mfrow=c(1,1))
+# Make a basic volcano plot
+with(res, plot(log2FoldChange, -log10(pvalue), pch=20, main="Volcano plot", xlim=c(-3,3)))
+
+# Add colored points: blue if padj<0.01, red if log2FC>1 and padj<0.05)
+with(subset(res, padj<.01 ), points(log2FoldChange, -log10(pvalue), pch=20, col="blue"))
+with(subset(res, padj<.01 & abs(log2FoldChange)>2), points(log2FoldChange, -log10(pvalue), pch=20, col="red"))
+
+# PCA plot
+# Plot this PCA to get the % variance explained
+vsdata <- vst(dds, blind=FALSE)
+plotPCA(vsdata, intgroup="condition", "teb_treatment")
+
+# Labelled PCA
+vsdata <- vst(dds, blind=FALSE)
+
+# Create PCA plot
+pca_data <- plotPCA(vsdata, intgroup = c("condition", "teb_treatment"), returnData = TRUE)
+
+# Calculate percentage variance explained
+percent_var <- pca_data$importance[, "Percentage of Variance"]
+
+# Create PCA plot with sampleName labels and % variance input from above
+ggplot(pca_data, aes(x = PC1, y = PC2, color = condition, shape = teb_treatment)) +
+  geom_point(size = 5) +
+  geom_text_repel(aes(label = rownames(pca_data)), size = 3, segment.size = 0.2) +
+  scale_color_manual(values = c("slateblue1", "sienna1", "deeppink3", "lightseagreen")) +
+  theme_bw() +
+  ggtitle("PCA Plot") +
+  xlab("PC1 66% variance") +
+  ylab("PC2 11% variance")
+
+# Heat map
+rld <- rlog( dds )
+head( assay(rld) )
+par( mfrow = c( 1, 2 ) )
+plot( log2( 1+counts(dds, normalized=TRUE)[, 1:2] ), col="#00000020", pch=20, cex=0.3 )
+plot( assay(rld)[, 1:2], col="#00000020", pch=20, cex=0.3 )
+sampleDists <- dist( t( assay(rld) ) )
+sampleDists
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <- paste( rld$treatment,
+                                     rld$patient, sep="-" )
+colnames(sampleDistMatrix) <- NULL
+colours = colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+heatmap.2( sampleDistMatrix, trace="none", col=colours)
