@@ -1,3 +1,5 @@
+# multiqc combines all of the outputs from fastqc and compiles the data in order for analysis to be done
+
 zips=$(ls *.zip)
 
 for i in $zips; do
